@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { makeStyles, Chip, IconButton, TextField } from "@material-ui/core";
+import { makeStyles, Chip, IconButton } from "@material-ui/core";
 import { PlayArrow, Delete, Cancel, Visibility } from "@material-ui/icons";
 import MaterialTable, { EditComponentProps, MTableToolbar } from "material-table";
 import { useSnackbar } from "notistack";
@@ -9,7 +9,13 @@ import { toKeyValue, exportCSV, rowDiff, updateTableFilter } from "../../functio
 import { Dataset } from "../../typings";
 import AnalysisRunnerDialog from "./AnalysisRunnerDialog";
 import DatasetInfoDialog from "./DatasetInfoDialog";
-import { DateTimeText, DateFilterComponent, Note, FileLinkingComponent } from "../../components";
+import {
+    DateTimeText,
+    DateFilterComponent,
+    EditNotes,
+    Note,
+    FileLinkingComponent,
+} from "../../components";
 import LinkedFilesButton from "./LinkedFilesButton";
 import {
     useDatasetUpdateMutation,
@@ -38,16 +44,6 @@ const customFileFilterAndSearch = (filter: string, rowData: Dataset) => {
         rowData.linked_files.some(name => name.includes(filter))
     );
 };
-
-const EditNotesComponent = (props: EditComponentProps<Dataset>) => (
-    <TextField
-        multiline
-        value={props.value}
-        onChange={event => props.onChange(event.target.value)}
-        rows={4}
-        fullWidth
-    />
-);
 
 const EditFilesComponent = (props: EditComponentProps<Dataset>) => {
     const filesQuery = useUnlinkedFilesQuery();
@@ -147,7 +143,7 @@ export default function DatasetTable() {
                         title: "Notes",
                         field: "notes",
                         render: RenderNotes,
-                        editComponent: EditNotesComponent,
+                        editComponent: EditNotes,
                     },
                     {
                         title: "Files",

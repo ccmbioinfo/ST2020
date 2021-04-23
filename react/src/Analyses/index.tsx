@@ -1,14 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useHistory, useParams } from "react-router";
-import {
-    Chip,
-    IconButton,
-    TextField,
-    Container,
-    Select,
-    MenuItem,
-    useTheme,
-} from "@material-ui/core";
+import { Chip, IconButton, Container, Select, MenuItem, useTheme } from "@material-ui/core";
 import {
     Cancel,
     Add,
@@ -18,13 +10,19 @@ import {
     AssignmentTurnedIn,
     Error,
 } from "@material-ui/icons";
-import { makeStyles, Theme } from "@material-ui/core/styles";
-import MaterialTable, { MTableToolbar } from "material-table";
+import { makeStyles } from "@material-ui/core/styles";
+import MaterialTable, { MTableToolbar, Column, EditComponentProps } from "material-table";
 import { useSnackbar } from "notistack";
 import { UseMutationResult } from "react-query";
 import { isRowSelected, exportCSV, updateTableFilter, toTitleCase, toKeyValue } from "../functions";
-import { Analysis, AnalysisPriority, PipelineStatus } from "../typings";
-import { AnalysisInfoDialog, Note, DateTimeText, DateFilterComponent } from "../components";
+import { Analysis, PipelineStatus } from "../typings";
+import {
+    AnalysisInfoDialog,
+    Note,
+    EditNotes,
+    DateTimeText,
+    DateFilterComponent,
+} from "../components";
 import {
     AnalysisOptions,
     useAnalysesPage,
@@ -152,17 +150,21 @@ async function _changeStateForSelectedRows(
     return { changed, skipped, failed };
 }
 
-const getHighlightColor = (theme: Theme, priority: AnalysisPriority, status: PipelineStatus) => {
-    const statusRelevant = [PipelineStatus.PENDING, PipelineStatus.RUNNING].includes(status);
+const exportCsv = (columns: Column<Analysis>[], data: any[]) =>
+    exportCSV(columns, data, "Analyses");
 
-    if (statusRelevant && priority === "Research") {
-        return { backgroundColor: theme.palette.warning.light };
-    }
-    if (statusRelevant && priority === "Clinical") {
-        return { backgroundColor: theme.palette.error.light };
-    }
-    return {};
-};
+const renderNotes = (rowData: Analysis) => <Note>{rowData.notes}</Note>;
+
+const renderDateTime = (rowData: Analysis) => <DateTimeText datetime={rowData.updated} />;
+
+const renderDateFilter = (props: any) => <DateFilterComponent {...props} />;
+
+const renderPipeName = (row: Analysis) => pipeName(row);
+
+const renderPipeFilter = (props: {
+    columnDef: Column<Analysis>;
+    onFilterChanged: (rowId: string, value: any) => void;
+}) => <PipelineFilter {...props} />;
 
 export default function Analyses() {
     const classes = useStyles();
@@ -188,15 +190,55 @@ export default function Analyses() {
     const { enqueueSnackbar } = useSnackbar();
     const { id: paramID } = useParams<{ id: string }>();
 
+    useEffect(() => {
+        document.title = `Analyses | ${process.env.REACT_APP_NAME}`;
+    }, []);
+
     const tableRef = useRef<any>();
+
+    const PrioritySelectComponent = useMemo(
+        () => ({ onChange, value }: EditComponentProps<Analysis>) => {
+            return (
+                <Select
+                    value={value || "None"}
+                    onChange={event =>
+                        onChange(event.target.value === "None" ? null : event.target.value)
+                    }
+                    fullWidth
+                >
+                    {enums?.PriorityType.map(p => (
+                        <MenuItem key={p} value={p}>
+                            {p}
+                        </MenuItem>
+                    ))}
+                    <MenuItem value="None">None</MenuItem>
+                </Select>
+            );
+        },
+        [enums]
+    );
 
     function changeAnalysisState(filter: (row: Analysis) => boolean, newState: PipelineStatus) {
         return _changeStateForSelectedRows(activeRows, filter, analysisUpdateMutation, newState);
     }
 
-    useEffect(() => {
-        document.title = `Analyses | ${process.env.REACT_APP_NAME}`;
-    }, []);
+    const getRowStyle = useMemo(
+        () => (data: Analysis) => {
+            const { priority, analysis_state } = data || {};
+            const statusRelevant = [PipelineStatus.PENDING, PipelineStatus.RUNNING].includes(
+                analysis_state
+            );
+
+            if (statusRelevant && priority === "Research") {
+                return { backgroundColor: theme.palette.warning.light };
+            }
+            if (statusRelevant && priority === "Clinical") {
+                return { backgroundColor: theme.palette.error.light };
+            }
+            return {};
+        },
+        [theme.palette.error.light, theme.palette.warning.light]
+    );
 
     return (
         <main className={classes.content}>
@@ -322,8 +364,8 @@ export default function Analyses() {
                             type: "string",
                             width: "8%",
                             editable: "never",
-                            render: (row, type) => pipeName(row),
-                            filterComponent: props => <PipelineFilter {...props} />,
+                            render: renderPipeName,
+                            filterComponent: renderPipeFilter,
                         },
                         {
                             title: "Assignee",
@@ -338,28 +380,7 @@ export default function Analyses() {
                             type: "string",
                             width: "8%",
                             lookup: priorityLookup,
-                            editComponent: ({ onChange, value }) => {
-                                return (
-                                    <Select
-                                        value={value || "None"}
-                                        onChange={event =>
-                                            onChange(
-                                                event.target.value === "None"
-                                                    ? null
-                                                    : event.target.value
-                                            )
-                                        }
-                                        fullWidth
-                                    >
-                                        {enums?.PriorityType.map(p => (
-                                            <MenuItem key={p} value={p}>
-                                                {p}
-                                            </MenuItem>
-                                        ))}
-                                        <MenuItem value="None">None</MenuItem>
-                                    </Select>
-                                );
-                            },
+                            editComponent: PrioritySelectComponent,
                         },
                         {
                             title: "Requester",
@@ -373,8 +394,8 @@ export default function Analyses() {
                             field: "updated",
                             type: "string",
                             editable: "never",
-                            render: rowData => <DateTimeText datetime={rowData.updated} />,
-                            filterComponent: props => <DateFilterComponent {...props} />,
+                            render: renderDateTime,
+                            filterComponent: renderDateFilter,
                         },
                         {
                             title: "Path Prefix",
@@ -391,16 +412,8 @@ export default function Analyses() {
                             title: "Notes",
                             field: "notes",
                             type: "string",
-                            render: rowData => <Note>{rowData.notes}</Note>,
-                            editComponent: props => (
-                                <TextField
-                                    multiline
-                                    value={props.value}
-                                    onChange={event => props.onChange(event.target.value)}
-                                    rows={4}
-                                    fullWidth
-                                />
-                            ),
+                            render: renderNotes,
+                            editComponent: EditNotes,
                         },
                     ]}
                     isLoading={analysisUpdateMutation.isLoading}
@@ -414,9 +427,8 @@ export default function Analyses() {
                         selection: true,
                         exportAllData: true,
                         exportButton: { csv: true, pdf: false },
-                        exportCsv: (columns, data) => exportCSV(columns, data, "Analyses"),
-                        rowStyle: data =>
-                            getHighlightColor(theme, data.priority, data.analysis_state),
+                        exportCsv: exportCsv,
+                        rowStyle: getRowStyle,
                     }}
                     actions={[
                         {
