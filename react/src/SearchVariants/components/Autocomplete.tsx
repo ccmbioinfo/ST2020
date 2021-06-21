@@ -1,9 +1,20 @@
-import React, { useState } from "react";
-import { CircularProgress, OutlinedInput, useTheme } from "@material-ui/core";
-import { Search } from "@material-ui/icons";
+import React, { useMemo, useState } from "react";
+import {
+    CircularProgress,
+    IconButton,
+    Menu,
+    MenuItem,
+    OutlinedInput,
+    useTheme,
+} from "@material-ui/core";
+import { Menu as MenuIcon, Search } from "@material-ui/icons";
 import { Autocomplete } from "@material-ui/lab";
+import { snakeCaseToTitle } from "../../functions";
 import { useGenesQuery } from "../../hooks/genes";
 import { GeneAlias } from "../../typings";
+
+type SearchCategory = "gene" | "region" | "variant_position" | "rsld";
+const searchCategoryList: SearchCategory[] = ["gene", "region", "variant_position", "rsld"];
 
 interface GeneAutocompleteProps {
     fullWidth?: boolean;
@@ -11,10 +22,65 @@ interface GeneAutocompleteProps {
     onSelect: (result: GeneAlias) => void;
 }
 
+interface SearchCategorySelectProps {
+    value: SearchCategory;
+    onSelect: (value: SearchCategory) => void;
+}
+
+function SearchCategorySelect(props: SearchCategorySelectProps) {
+    const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+
+    return (
+        <>
+            <IconButton size="small" onClick={event => setAnchorEl(event.currentTarget)}>
+                <MenuIcon />
+            </IconButton>
+            <Menu
+                transformOrigin={{ horizontal: "left", vertical: "top" }}
+                anchorEl={anchorEl}
+                keepMounted
+                open={!!anchorEl}
+                onClose={() => setAnchorEl(null)}
+            >
+                {searchCategoryList.map(category => (
+                    <MenuItem
+                        key={category}
+                        onClick={() => {
+                            props.onSelect(category);
+                            setAnchorEl(null);
+                        }}
+                        selected={props.value === category}
+                    >
+                        {"Search by " + snakeCaseToTitle(category)}
+                    </MenuItem>
+                ))}
+            </Menu>
+        </>
+    );
+}
+
 const GeneAutocomplete: React.FC<GeneAutocompleteProps> = ({ fullWidth, onSearch, onSelect }) => {
     const [search, setSearch] = useState<string>("");
     const [selectedValue, setSelectedValue] = useState<GeneAlias>();
+    const [searchCategory, setSearchCategory] = useState<SearchCategory>("gene");
 
+    const placeholderText = useMemo(() => {
+        switch (searchCategory) {
+            case "gene":
+                return "Search by Gene Name (eg. APOE, VEGFA)";
+            case "region":
+                return "Search by Region";
+            case "variant_position":
+                return "Search by Variant Position";
+            case "rsld":
+                return "Search by RSLD";
+            default:
+                console.error("Unexpected search category");
+                return "";
+        }
+    }, [searchCategory]);
+
+    // TODO: add searchCategory to params once backend is updated to support other search categories
     const { data: results, isFetching } = useGenesQuery(
         {
             search,
@@ -57,13 +123,22 @@ const GeneAutocomplete: React.FC<GeneAutocompleteProps> = ({ fullWidth, onSearch
                 const { InputLabelProps, InputProps, ...rest } = params;
                 return (
                     <OutlinedInput
-                        placeholder="Search by Gene Name (eg. APOE, VEGFA)"
+                        placeholder={placeholderText}
                         {...rest}
                         {...InputProps}
                         startAdornment={
                             <Search fontSize="small" htmlColor={theme.palette.grey[600]} />
                         }
-                        endAdornment={isFetching ? <CircularProgress size={16} /> : null}
+                        endAdornment={
+                            isFetching ? (
+                                <CircularProgress size={16} />
+                            ) : (
+                                <SearchCategorySelect
+                                    value={searchCategory}
+                                    onSelect={setSearchCategory}
+                                />
+                            )
+                        }
                     />
                 );
             }}
