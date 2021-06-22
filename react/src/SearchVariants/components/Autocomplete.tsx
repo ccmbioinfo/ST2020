@@ -1,13 +1,16 @@
 import React, { useMemo, useState } from "react";
 import {
+    Button,
     CircularProgress,
+    Divider,
     IconButton,
+    makeStyles,
     Menu,
     MenuItem,
     OutlinedInput,
     useTheme,
 } from "@material-ui/core";
-import { Menu as MenuIcon, Search } from "@material-ui/icons";
+import { ArrowDropDown, Check, Menu as MenuIcon, Search } from "@material-ui/icons";
 import { Autocomplete } from "@material-ui/lab";
 import { snakeCaseToTitle } from "../../functions";
 import { useGenesQuery } from "../../hooks/genes";
@@ -27,31 +30,47 @@ interface SearchCategorySelectProps {
     onSelect: (value: SearchCategory) => void;
 }
 
+const useSelectStyles = makeStyles(theme => ({
+    check: {
+        marginLeft: theme.spacing(2),
+    },
+    divider: {
+        margin: theme.spacing(0, 1),
+    },
+}));
+
 function SearchCategorySelect(props: SearchCategorySelectProps) {
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+    const classes = useSelectStyles();
 
     return (
         <>
-            <IconButton size="small" onClick={event => setAnchorEl(event.currentTarget)}>
-                <MenuIcon />
-            </IconButton>
+            <Button onClick={event => setAnchorEl(event.currentTarget)}>
+                {snakeCaseToTitle(props.value)}
+                <ArrowDropDown />
+            </Button>
+            <Divider className={classes.divider} orientation="vertical" flexItem />
             <Menu
+                anchorOrigin={{ horizontal: "left", vertical: "bottom" }}
                 transformOrigin={{ horizontal: "left", vertical: "top" }}
                 anchorEl={anchorEl}
                 keepMounted
                 open={!!anchorEl}
                 onClose={() => setAnchorEl(null)}
+                variant="menu"
             >
                 {searchCategoryList.map(category => (
                     <MenuItem
                         key={category}
-                        onClick={() => {
-                            props.onSelect(category);
-                            setAnchorEl(null);
-                        }}
+                        onClick={() => props.onSelect(category)}
                         selected={props.value === category}
                     >
                         {"Search by " + snakeCaseToTitle(category)}
+                        <div style={{ flex: 1 }} />
+                        <Check
+                            className={classes.check}
+                            style={{ visibility: props.value === category ? "inherit" : "hidden" }}
+                        />
                     </MenuItem>
                 ))}
             </Menu>
@@ -127,17 +146,16 @@ const GeneAutocomplete: React.FC<GeneAutocompleteProps> = ({ fullWidth, onSearch
                         {...rest}
                         {...InputProps}
                         startAdornment={
-                            <Search fontSize="small" htmlColor={theme.palette.grey[600]} />
+                            <SearchCategorySelect
+                                value={searchCategory}
+                                onSelect={setSearchCategory}
+                            />
                         }
                         endAdornment={
-                            isFetching ? (
-                                <CircularProgress size={16} />
-                            ) : (
-                                <SearchCategorySelect
-                                    value={searchCategory}
-                                    onSelect={setSearchCategory}
-                                />
-                            )
+                            <>
+                                {isFetching ? <CircularProgress size={16} /> : null}
+                                <Search fontSize="small" htmlColor={theme.palette.grey[600]} />
+                            </>
                         }
                     />
                 );

@@ -106,7 +106,7 @@ const SearchVariantsPage: React.FC<SearchVariantsPageProps> = () => {
                 <Grid spacing={3} direction="column" container alignItems="center">
                     <Grid item xs={12}>
                         <Typography align="center" variant="h3">
-                            Search for Variants by Gene
+                            Search for Variants
                         </Typography>
                     </Grid>
                     <Grid
