@@ -4,6 +4,7 @@ import {
     CircularProgress,
     Divider,
     IconButton,
+    InputAdornment,
     makeStyles,
     Menu,
     MenuItem,
@@ -78,10 +79,17 @@ function SearchCategorySelect(props: SearchCategorySelectProps) {
     );
 }
 
+const useStyles = makeStyles(theme => ({
+    adornment: {
+        margin: theme.spacing(0, 1),
+    },
+}));
+
 const GeneAutocomplete: React.FC<GeneAutocompleteProps> = ({ fullWidth, onSearch, onSelect }) => {
     const [search, setSearch] = useState<string>("");
     const [selectedValue, setSelectedValue] = useState<GeneAlias>();
     const [searchCategory, setSearchCategory] = useState<SearchCategory>("gene");
+    const classes = useStyles();
 
     const placeholderText = useMemo(() => {
         switch (searchCategory) {
@@ -111,6 +119,8 @@ const GeneAutocomplete: React.FC<GeneAutocompleteProps> = ({ fullWidth, onSearch
 
     return (
         <Autocomplete
+            disableClearable
+            forcePopupIcon={false}
             autoComplete
             clearOnEscape
             fullWidth={fullWidth}
@@ -152,16 +162,24 @@ const GeneAutocomplete: React.FC<GeneAutocompleteProps> = ({ fullWidth, onSearch
                             />
                         }
                         endAdornment={
-                            <>
-                                {isFetching ? <CircularProgress size={16} /> : null}
-                                <Search fontSize="small" htmlColor={theme.palette.grey[600]} />
-                            </>
+                            <InputAdornment position="end">
+                                <CircularProgress
+                                    className={classes.adornment}
+                                    size={16}
+                                    style={{ visibility: isFetching ? "inherit" : "hidden" }}
+                                />
+                                <Search
+                                    className={classes.adornment}
+                                    fontSize="small"
+                                    htmlColor={theme.palette.grey[600]}
+                                />
+                            </InputAdornment>
                         }
                     />
                 );
             }}
             //we have to control component in order to *prevent* selection persistence
-            value={selectedValue || null}
+            value={selectedValue || undefined}
         />
     );
 };
