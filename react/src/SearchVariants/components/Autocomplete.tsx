@@ -3,7 +3,6 @@ import {
     Button,
     CircularProgress,
     Divider,
-    IconButton,
     InputAdornment,
     makeStyles,
     Menu,
@@ -11,7 +10,7 @@ import {
     OutlinedInput,
     useTheme,
 } from "@material-ui/core";
-import { ArrowDropDown, Check, Menu as MenuIcon, Search } from "@material-ui/icons";
+import { ArrowDropDown, Check, Search } from "@material-ui/icons";
 import { Autocomplete } from "@material-ui/lab";
 import { snakeCaseToTitle } from "../../functions";
 import { useGenesQuery } from "../../hooks/genes";
