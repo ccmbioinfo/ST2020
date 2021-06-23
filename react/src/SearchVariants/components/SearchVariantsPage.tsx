@@ -245,34 +245,37 @@ const SearchVariantsPage: React.FC<SearchVariantsPageProps> = () => {
                                 disabled={disableControls}
                             />
                         </Grid>
-                        <Grid item xs={12}>
-                            <FormControl fullWidth>
-                                <InputLabel>Columns included in Report</InputLabel>
-                                <Select
-                                    multiple
-                                    value={columns}
-                                    onChange={e => updateColumns(e.target.value as string[])}
-                                    renderValue={selected => (
-                                        <div className={classes.selectChips}>
-                                            {(selected as string[]).map(column => (
-                                                <Chip
-                                                    key={column}
-                                                    label={snakeCaseToTitle(column)}
-                                                    className={classes.selectChip}
-                                                />
-                                            ))}
-                                        </div>
-                                    )}
-                                >
-                                    {temporaryListOfReportColumns.map(column => (
-                                        <MenuItem key={column} value={column}>
-                                            <Checkbox checked={columns.includes(column)} />
-                                            <ListItemText primary={snakeCaseToTitle(column)} />
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
+                        {process.env.NODE_ENV === "development" && (
+                            // TODO: Remove dev-only rendering when endpoint is updated to accept report columns
+                            <Grid item xs={12}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Columns included in Report</InputLabel>
+                                    <Select
+                                        multiple
+                                        value={columns}
+                                        onChange={e => updateColumns(e.target.value as string[])}
+                                        renderValue={selected => (
+                                            <div className={classes.selectChips}>
+                                                {(selected as string[]).map(column => (
+                                                    <Chip
+                                                        key={column}
+                                                        label={snakeCaseToTitle(column)}
+                                                        className={classes.selectChip}
+                                                    />
+                                                ))}
+                                            </div>
+                                        )}
+                                    >
+                                        {temporaryListOfReportColumns.map(column => (
+                                            <MenuItem key={column} value={column}>
+                                                <Checkbox checked={columns.includes(column)} />
+                                                <ListItemText primary={snakeCaseToTitle(column)} />
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+                        )}
                     </Grid>
                     <Grid container item xs={12} md={6} wrap="nowrap">
                         <Grid item>

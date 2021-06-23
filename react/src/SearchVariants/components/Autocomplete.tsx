@@ -155,10 +155,13 @@ const GeneAutocomplete: React.FC<GeneAutocompleteProps> = ({ fullWidth, onSearch
                         {...rest}
                         {...InputProps}
                         startAdornment={
-                            <SearchCategorySelect
-                                value={searchCategory}
-                                onSelect={setSearchCategory}
-                            />
+                            process.env.NODE_ENV === "development" && (
+                                // TODO: Remove dev-only rendering when endpoint is updated to accept search category
+                                <SearchCategorySelect
+                                    value={searchCategory}
+                                    onSelect={setSearchCategory}
+                                />
+                            )
                         }
                         endAdornment={
                             <InputAdornment position="end">
