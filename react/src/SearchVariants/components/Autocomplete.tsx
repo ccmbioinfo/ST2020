@@ -16,8 +16,13 @@ import { snakeCaseToTitle } from "../../functions";
 import { useGenesQuery } from "../../hooks/genes";
 import { GeneAlias } from "../../typings";
 
-type SearchCategory = "gene" | "region" | "variant_position" | "rsld";
-const searchCategoryList: SearchCategory[] = ["gene", "region", "variant_position", "rsld"];
+type SearchCategory = "gene" | "region" | "variant_position" | "rsid";
+const searchCategoryMap: Map<SearchCategory, string> = new Map([
+    ["gene", "Gene"],
+    ["region", "Region"],
+    ["variant_position", "Variant Position"],
+    ["rsid", "refSNP ID"],
+]);
 
 interface GeneAutocompleteProps {
     fullWidth?: boolean;
@@ -58,14 +63,15 @@ function SearchCategorySelect(props: SearchCategorySelectProps) {
                 open={!!anchorEl}
                 onClose={() => setAnchorEl(null)}
                 variant="menu"
+                getContentAnchorEl={null}
             >
-                {searchCategoryList.map(category => (
+                {Array.from(searchCategoryMap, ([category, title]) => (
                     <MenuItem
                         key={category}
                         onClick={() => props.onSelect(category)}
                         selected={props.value === category}
                     >
-                        {"Search by " + snakeCaseToTitle(category)}
+                        {title}
                         <div style={{ flex: 1 }} />
                         <Check
                             className={classes.check}
@@ -98,8 +104,8 @@ const GeneAutocomplete: React.FC<GeneAutocompleteProps> = ({ fullWidth, onSearch
                 return "Search by Region";
             case "variant_position":
                 return "Search by Variant Position";
-            case "rsld":
-                return "Search by RSLD";
+            case "rsid":
+                return "Search by refSNP ID";
             default:
                 console.error("Unexpected search category");
                 return "";
