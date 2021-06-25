@@ -130,9 +130,20 @@ const SearchVariantsPage: React.FC<SearchVariantsPageProps> = () => {
     });
     const columnModal = useModalState(false);
 
-    const updateColumns = (newColumns: string[]) => {
-        setColumns(newColumns);
-        localStorage.setItem("report-columns", JSON.stringify(newColumns));
+    const updateColumns = (action: React.SetStateAction<string[]>) => {
+        if (typeof action === "function") {
+            let newColumns: string[] = [];
+            const newAction = (prev: string[]) => {
+                const columns = action(prev);
+                newColumns = columns;
+                return columns;
+            };
+            setColumns(newAction);
+            localStorage.setItem("report-columns", JSON.stringify(newColumns));
+        } else {
+            setColumns(action);
+            localStorage.setItem("report-columns", JSON.stringify(action));
+        }
     };
 
     const toggleGeneSelection = (gene: GeneAlias) => {
@@ -273,7 +284,7 @@ const SearchVariantsPage: React.FC<SearchVariantsPageProps> = () => {
                 onClose={columnModal.onClose}
                 selectedColumns={columns}
                 allColumns={temporaryListOfReportColumns}
-                setSelected={setColumns}
+                setSelected={updateColumns}
             />
         </>
     );
