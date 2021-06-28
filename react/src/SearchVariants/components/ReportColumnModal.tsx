@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
     Button,
     Checkbox,
@@ -22,6 +22,13 @@ export interface ReportColumnModalProps {
 }
 
 export function ReportColumnModal(props: ReportColumnModalProps) {
+    const columnSelectMap = useMemo(() => {
+        const selectMap = new Map<string, boolean>();
+        props.allColumns.forEach(col => selectMap.set(col, false));
+        props.selectedColumns.forEach(col => selectMap.set(col, true));
+        return selectMap;
+    }, [props.selectedColumns, props.allColumns]);
+
     const handleClick = (clicked: string) => {
         props.setSelected(oldColumns =>
             oldColumns.includes(clicked)
@@ -54,7 +61,7 @@ export function ReportColumnModal(props: ReportColumnModalProps) {
                                         control={
                                             <Checkbox
                                                 color="default"
-                                                checked={props.selectedColumns.includes(col)}
+                                                checked={!!columnSelectMap.get(col)}
                                                 onChange={() => handleClick(col)}
                                                 name={col}
                                             />
