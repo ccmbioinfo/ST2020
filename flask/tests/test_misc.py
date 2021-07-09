@@ -1,6 +1,13 @@
-import pytest
-from app import db, models
+from unittest.mock import Mock
+from csv import DictReader
+from io import StringIO
+from pytest import raises
+
+from flask.wrappers import Request
 from sqlalchemy.orm import joinedload
+
+from app import models, db
+from app.routes import link_files_to_dataset
 
 # GET /api/pipelines
 
@@ -386,7 +393,7 @@ HOOD,HERO,Proband,Saliva,WGS,Female,GermLine,2020-12-17,/path/yeet|/path/cross|/
     for dataset in models.Dataset.query.all():
         print(dataset)
     assert models.Dataset.query.count() == 6
-    assert models.DatasetFile.query.count() == 5
+    assert models.File.query.count() == 5
     assert models.TissueSample.query.count() == 5
     assert models.Participant.query.count() == 4
     assert models.Family.query.count() == 3
@@ -408,7 +415,9 @@ def test_bulk_multiple_json(test_database, client, login_as):
                     "sex": "Female",
                     "condition": "GermLine",
                     "sequencing_date": "2020-12-17",
-                    "linked_files": ["/otonashi/yuzuru", "/tachibana/kanade"],
+                    "linked_files": [
+                        {"path": "/otonashi/yuzuru", "path": "/tachibana/kanade"}
+                    ],
                 },
                 {
                     "family_codename": "HOOD",
@@ -420,9 +429,8 @@ def test_bulk_multiple_json(test_database, client, login_as):
                     "condition": "GermLine",
                     "sequencing_date": "2020-12-17",
                     "linked_files": [
-                        "",
-                        "/perfectly/balanced",
-                        "/as/all/things/should/be",
+                        {"path": "/perfectly/balanced"},
+                        {"path": "/as/all/things/should/be"},
                     ],
                 },
             ],
@@ -431,7 +439,82 @@ def test_bulk_multiple_json(test_database, client, login_as):
     )
 
     assert models.Dataset.query.count() == 6
-    assert models.DatasetFile.query.count() == 4
+    assert models.File.query.count() == 3
     assert models.TissueSample.query.count() == 5
     assert models.Participant.query.count() == 4
     assert models.Family.query.count() == 3
+
+
+def test_fails_with_dupe_non_multiplex_fields(test_database):
+    """will upload fail if we try to link a non-multiplexed file multiple times?"""
+
+    csv = StringIO(
+        """family_codename,participant_codename,participant_type,tissue_sample_type,dataset_type,sex,condition,sequencing_date,linked_files,notes
+    HOOD,HERO,Proband,Saliva,WGS,Female,GermLine,2020-12-17,/path/foo|/path/bar"""
+    )
+
+    file = models.File(path="/path/foo", multiplexed=False)
+    db.session.add(file)
+
+    row = next(DictReader(csv))
+
+    dataset = models.Dataset()
+
+    mock_request = Mock(spec=Request)
+    mock_request.content_type = "text/csv"
+
+    with raises(Exception) as e:
+        link_files_to_dataset(mock_request, dataset, row)
+
+    assert "already linked" in str(e.value)
+
+
+def test_can_add_existing_with_multiplex_flag(test_database):
+    """can we specify a path to an existing file if the multiplex flag is set?"""
+
+    file = models.File(path="/path/foo", multiplexed=True)
+    db.session.add(file)
+
+    row = {
+        "family_codename": "HOOD",
+        "participant_codename": "HERO",
+        "participant_type": "Proband",
+        "tissue_sample_type": "Saliva",
+        "dataset_type": "WES",
+        "sex": "Female",
+        "condition": "GermLine",
+        "sequencing_date": "2020-12-17",
+        "linked_files": [
+            {"path": "/path/foo", "multiplexed": True},
+        ],
+    }
+
+    dataset = models.Dataset()
+
+    mock_request = Mock(spec=Request)
+    mock_request.content_type = "appliction/json"
+
+    result = link_files_to_dataset(mock_request, dataset, row)
+
+    assert len(result.linked_files) == 1
+
+
+def test_can_mark_multiplex_with_asterisk(test_database):
+    """does the asterisk as multiplex indicator for csv uploads work?"""
+
+    csv = StringIO(
+        """family_codename,participant_codename,participant_type,tissue_sample_type,dataset_type,sex,condition,sequencing_date,linked_files,notes
+    HOOD,HERO,Proband,Saliva,WGS,Female,GermLine,2020-12-17,*/path/foo|/path/bar"""
+    )
+
+    row = next(DictReader(csv))
+
+    dataset = models.Dataset()
+
+    mock_request = Mock(spec=Request)
+    mock_request.content_type = "text/csv"
+
+    result = link_files_to_dataset(mock_request, dataset, row)
+
+    assert len(result.linked_files) == 2
+    assert len([f for f in result.linked_files if f.multiplexed]) == 1

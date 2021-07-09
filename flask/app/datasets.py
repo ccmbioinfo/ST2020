@@ -1,4 +1,5 @@
 from dataclasses import asdict
+from typing import List
 
 from flask import Blueprint, Response, abort, current_app as app, jsonify, request
 from flask_login import current_user, login_required
@@ -15,6 +16,7 @@ from .utils import (
     expects_json,
     filter_in_enum_or_abort,
     filter_updated_or_abort,
+    find,
     mixin,
     paged,
     paginated_response,
@@ -67,7 +69,7 @@ def list_datasets(page: int, limit: int) -> Response:
     elif order_by == "updated_by":
         order = models.User.username
     elif order_by == "linked_files":
-        order = models.DatasetFile.path
+        order = models.File.path
     elif order_by == "tissue_sample_type":
         order = models.TissueSample.tissue_sample_type
     elif order_by == "participant_codename":
@@ -102,9 +104,7 @@ def list_datasets(page: int, limit: int) -> Response:
     dataset_id = request.args.get("dataset_id", type=str)
     if dataset_id:
         filters.append(models.Dataset.dataset_id == dataset_id)
-    linked_files = request.args.get("linked_files", type=str)
-    if linked_files:
-        filters.append(func.instr(models.DatasetFile.path, linked_files))
+
     participant_codename = request.args.get("participant_codename", type=str)
     if participant_codename:
         filters.append(
@@ -153,7 +153,7 @@ def list_datasets(page: int, limit: int) -> Response:
             # but if we want to search, a solution might be a subquery (something similar to the filter in analyses.py:194-208)
             # FE will have to be adjusted to disallow sorting/filtering on these fields
             selectinload(models.Dataset.groups),
-            selectinload(models.Dataset.files),
+            selectinload(models.Dataset.linked_files),
         )
         # join with these since they are 1-to-1 and we want to order/filter on some of their fields
         .join(models.Dataset.tissue_sample)
@@ -186,6 +186,16 @@ def list_datasets(page: int, limit: int) -> Response:
 
         query = query.filter(models.Dataset.dataset_id.in_(subquery))
 
+    linked_files = request.args.get("linked_files", type=str)
+    if linked_files:
+        subquery = (
+            models.Dataset.query.join(models.Dataset.linked_files)
+            .filter(func.instr(models.File.path, linked_files))
+            .with_entities(models.Dataset.dataset_id)
+            .subquery()
+        )
+        query = query.filter(models.Dataset.dataset_id.in_(subquery))
+
     # total_count always refers to the number of unique datasets in the database
     total_count = query.with_entities(
         func.count(distinct(models.Dataset.dataset_id))
@@ -196,6 +206,7 @@ def list_datasets(page: int, limit: int) -> Response:
     results = [
         {
             **asdict(dataset),
+            "linked_files": dataset.linked_files,
             "tissue_sample_type": dataset.tissue_sample.tissue_sample_type,
             "participant_aliases": dataset.tissue_sample.participant.participant_aliases,
             "participant_codename": dataset.tissue_sample.participant.participant_codename,
@@ -343,12 +354,7 @@ def update_dataset(id: int):
         abort(400, description=enum_error)
 
     if "linked_files" in request.json:
-        for existing in dataset.files:
-            if existing.path not in request.json["linked_files"]:
-                db.session.delete(existing)
-        for path in request.json["linked_files"]:
-            if path not in dataset.linked_files:
-                dataset.files.append(models.DatasetFile(path=path))
+        dataset = update_dataset_linked_files(dataset, request.json["linked_files"])
 
     if user_id:
         dataset.updated_by_id = user_id
@@ -358,6 +364,7 @@ def update_dataset(id: int):
     return jsonify(
         {
             **asdict(dataset),
+            "linked_files": dataset.linked_files,
             "updated_by": dataset.updated_by.username,
             "created_by": dataset.created_by.username,
         }
@@ -440,7 +447,7 @@ def create_dataset():
     # TODO: add stricter checks?
     if request.json.get("linked_files"):
         for path in request.json["linked_files"]:
-            dataset.files.append(models.DatasetFile(path=path))
+            dataset.linked_files.append(models.File(path=path))
     db.session.add(dataset)
     transaction_or_abort(db.session.commit)
     ds_id = dataset.dataset_id
@@ -457,3 +464,51 @@ def create_dataset():
         201,
         {"location": location_header},
     )
+
+
+def update_dataset_linked_files(
+    dataset: models.Dataset, linked_files: List[models.File]
+):
+    """update linked file relationship, validating input and deleting orphans"""
+    linked_file_paths = [f["path"] for f in linked_files]
+
+    existing_files = (
+        models.File.query.filter(models.File.path.in_(linked_file_paths))
+        .options(selectinload(models.File.datasets))
+        .all()
+    )
+
+    # delete orphan files, including multiplexed
+    for file in dataset.linked_files:
+        if file.path not in linked_file_paths and len(file.datasets) == 1:
+            db.session.delete(file)
+
+    # for simplicity, we'll rebuild the relationship, since really we're updating both the dataset model AND related file models
+    dataset.linked_files = []
+
+    # update or insert
+    for file_model in linked_files:
+        existing = find(
+            existing_files,
+            lambda existing, path=file_model["path"]: existing.path == path,
+        )
+
+        if existing:
+            # existing were either previously attached or multiplex
+            if (not file_model.get("multiplexed")) and len(existing.datasets) > 0:
+                abort(
+                    400,
+                    description="Attempting to add non-multiplexed file to multiple datasets or remove multiplex flag from multiplexed file",
+                )
+            existing.multiplexed = file_model["multiplexed"]
+            dataset.linked_files.append(existing)
+        else:
+            # insert new files
+            dataset.linked_files.append(
+                models.File(
+                    path=file_model["path"],
+                    multiplexed=file_model.get("multiplexed"),
+                )
+            )
+
+    return dataset

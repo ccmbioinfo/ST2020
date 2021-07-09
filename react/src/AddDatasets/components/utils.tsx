@@ -1,5 +1,12 @@
 import { getDataEntryHeaders, snakeCaseToTitle, strIsEmpty } from "../../functions";
-import { DataEntryHeader, DataEntryRow, Family, Option, Participant } from "../../typings";
+import {
+    DataEntryHeader,
+    DataEntryRow,
+    Family,
+    Option,
+    Participant,
+    UnlinkedFile,
+} from "../../typings";
 
 export const booleanColumns: Array<keyof DataEntryRow> = ["affected", "solved"];
 export const dateColumns: Array<keyof DataEntryRow> = ["sequencing_date"];
@@ -92,9 +99,9 @@ export function getOptions(
     rowIndex: number,
     families: Family[],
     enums: Record<string, string[]> | undefined,
-    files: string[],
+    files: UnlinkedFile[],
     institutions: string[]
-): Option[] {
+) {
     const row = rows[rowIndex];
     const rowOptions = rows
         .filter((val, index) => index !== rowIndex) // not this row
@@ -172,7 +179,7 @@ export function getOptions(
             return booleans.map(b => toOption(b, "Is Solved"));
 
         case "linked_files":
-            return files.map(f => toOption(f, "Unlinked files"));
+            return files;
 
         case "condition":
             if (enums) {

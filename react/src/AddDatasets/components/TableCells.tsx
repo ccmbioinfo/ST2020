@@ -12,7 +12,7 @@ import { Autocomplete, createFilterOptions } from "@material-ui/lab";
 import { Resizable } from "re-resizable";
 import FileLinkingComponent from "../../components/FileLinkingComponent";
 import { strIsEmpty } from "../../functions";
-import { DataEntryHeader, DataEntryRow, Option } from "../../typings";
+import { DataEntryHeader, DataEntryRow, Option, UnlinkedFile } from "../../typings";
 import { booleanColumns, dateColumns, enumerableColumns, toOption } from "./utils";
 
 const useCellStyles = makeStyles(theme => ({
@@ -39,8 +39,8 @@ export function DataEntryCell(props: {
     row: DataEntryRow;
     rowIndex: number;
     col: DataEntryHeader;
-    getOptions: (rowIndex: number, col: DataEntryHeader) => Option[];
-    onEdit: (newValue: string | boolean | string[], autocomplete?: boolean) => void;
+    getOptions: (rowIndex: number, col: DataEntryHeader) => any[];
+    onEdit: (newValue: string | boolean | UnlinkedFile[], autocomplete?: boolean) => void;
     disabled?: boolean;
     required?: boolean;
     onSearch?: (value: string) => void;

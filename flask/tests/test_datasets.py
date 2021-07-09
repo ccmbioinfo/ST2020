@@ -1,6 +1,10 @@
 import pytest
-from app import db, models
+
 from sqlalchemy.orm import joinedload
+
+from app import db, models, tissue_samples
+from app.datasets import update_dataset_linked_files
+
 
 # TODO: some tests do not precisely verify response structure
 
@@ -145,7 +149,10 @@ def test_update_dataset_admin(client, test_database, login_as):
 
     changes = [
         {"notes": "stop the count"},
-        {"dataset_type": "WES", "linked_files": ["/path/to/file"]},
+        {
+            "dataset_type": "WES",
+            "linked_files": [{"path": "/path/to/file", "multiplexed": False}],
+        },
     ]
     for body in changes:
         response = client.patch("/api/datasets/2", json=body)
@@ -168,7 +175,10 @@ def test_update_dataset_user(client, test_database, login_as):
 
     changes = [
         {"notes": "stop the count"},
-        {"dataset_type": "WES", "linked_files": ["/path/to/file"]},
+        {
+            "dataset_type": "WES",
+            "linked_files": [{"path": "/path/to/file", "multiplexed": False}],
+        },
     ]
     for body in changes:
         response = client.patch("/api/datasets/2", json=body)
@@ -562,3 +572,61 @@ def test_dataset_order_by_related_column(client, test_database, login_as):
     body = response.get_json()
     assert len(body["data"]) == 4
     assert body["data"][0]["tissue_sample_type"] == "Blood"
+
+
+def test_orphan_nonmultiplexed_files_deleted(test_database):
+    path_name = "test_orphan_nonmultiplexed_files_deleted"
+    file = models.File(path=path_name)
+    db.session.add(file)
+    db.session.commit()
+
+    assert models.File.query.filter(models.File.path == path_name).count() == 1
+
+    dataset = models.Dataset(
+        tissue_sample_id=1,
+        dataset_type="RES",
+        condition="Control",
+        created_by_id=1,
+        updated_by_id=1,
+    )
+    dataset.linked_files.append(file)
+
+    dataset = update_dataset_linked_files(dataset, [{"path": "new_path"}])
+
+    assert len(dataset.linked_files) == 1
+    assert models.File.query.filter(models.File.path == path_name).count() == 0
+
+
+def test_orphan_multiplexed_files_with_multiple_datasets_attached_not_deleted(
+    test_database,
+):
+    path_name = "test_orphan_nonmultiplexed_files_deleted"
+    file = models.File(path=path_name, multiplexed=True)
+    db.session.add(file)
+    db.session.commit()
+
+    assert models.File.query.filter(models.File.path == path_name).count() == 1
+
+    dataset = models.Dataset(
+        tissue_sample_id=1,
+        dataset_type="RES",
+        condition="Control",
+        created_by_id=1,
+        updated_by_id=1,
+    )
+
+    dataset_2 = models.Dataset(
+        tissue_sample_id=1,
+        dataset_type="RES",
+        condition="Control",
+        created_by_id=1,
+        updated_by_id=1,
+    )
+
+    dataset.linked_files.append(file)
+    dataset_2.linked_files.append(file)
+
+    dataset = update_dataset_linked_files(dataset, [{"path": "new_path"}])
+
+    assert len(dataset.linked_files) == 1
+    assert models.File.query.filter(models.File.path == path_name).count() == 1

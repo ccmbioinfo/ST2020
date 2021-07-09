@@ -27,18 +27,21 @@ export default function SecretDisplay(props: {
                     </IconButton>
                 </Tooltip>
                 <Tooltip title="Copy to clipboard">
-                    <IconButton
-                        disabled={!props.secret}
-                        onClick={() => {
-                            if (props.secret !== undefined) {
-                                navigator.clipboard.writeText(props.secret).then(() => {
-                                    enqueueSnackbar(`${props.title} copied to clipboard.`);
-                                });
-                            }
-                        }}
-                    >
-                        <FileCopy />
-                    </IconButton>
+                    {/* prevent mui warnings about tooltip wrapping disabled button */}
+                    <span>
+                        <IconButton
+                            disabled={!props.secret}
+                            onClick={() => {
+                                if (props.secret !== undefined) {
+                                    navigator.clipboard.writeText(props.secret).then(() => {
+                                        enqueueSnackbar(`${props.title} copied to clipboard.`);
+                                    });
+                                }
+                            }}
+                        >
+                            <FileCopy />
+                        </IconButton>
+                    </span>
                 </Tooltip>
             </Typography>
             {props.loading ? (

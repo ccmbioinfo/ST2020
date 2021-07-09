@@ -60,6 +60,15 @@ export interface Sample {
     updated: string;
     updated_by: number;
 }
+
+export interface UnlinkedFile {
+    path: string;
+    multiplexed?: boolean;
+}
+export interface LinkedFile extends UnlinkedFile {
+    file_id: number;
+}
+
 export interface Dataset {
     dataset_id: string;
     participant_codename: string;
@@ -69,7 +78,7 @@ export interface Dataset {
     tissue_sample_type: string;
     tissue_sample_id: string;
     dataset_type: string;
-    linked_files: string[]; // paths to files
+    linked_files: LinkedFile[];
     notes: string;
     condition: string;
     extraction_protocol: string;
@@ -174,7 +183,7 @@ export class DataEntryRowOptional {
     sex?: string;
     affected?: boolean;
     solved?: boolean;
-    linked_files?: string[];
+    linked_files?: LinkedFile[];
     notes?: string;
     extraction_protocol?: string;
     capture_kit?: string;

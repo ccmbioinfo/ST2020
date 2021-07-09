@@ -18,7 +18,10 @@ const useStyles = makeStyles(theme => ({
 
 function getFields(dataset: Dataset) {
     return [
-        createFieldObj("Linked Files", dataset.linked_files),
+        createFieldObj(
+            "Linked Files",
+            dataset.linked_files.map(f => f.path)
+        ),
         createFieldObj("Condition", dataset.condition),
         createFieldObj("Extraction Protocol", dataset.extraction_protocol),
         createFieldObj("Capture Kit", dataset.capture_kit),

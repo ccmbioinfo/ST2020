@@ -249,6 +249,13 @@ datasets_analyses_table = db.Table(
     ),  # for our composite FK on genotype
 )
 
+datasets_files_table = db.Table(
+    "datasets_files",
+    db.Model.metadata,
+    db.Column("file_id", db.Integer, db.ForeignKey("file.file_id")),
+    db.Column("dataset_id", db.Integer, db.ForeignKey("dataset.dataset_id")),
+)
+
 
 @dataclass
 class Dataset(db.Model):
@@ -297,19 +304,12 @@ class Dataset(db.Model):
     )
     updated_by = db.relationship("User", foreign_keys=[updated_by_id], lazy="joined")
     created_by = db.relationship("User", foreign_keys=[created_by_id], lazy="joined")
-
-    files = db.relationship(
-        "DatasetFile",
-        backref="dataset",
-        cascade="all, delete",
+    linked_files = db.relationship(
+        "File",
+        secondary=datasets_files_table,
+        backref="datasets",
         passive_deletes=True,
-        lazy="joined",
     )
-    linked_files: List[str]
-
-    @property
-    def linked_files(self) -> List[str]:
-        return [x.path for x in self.files]
 
 
 @dataclass
@@ -330,14 +330,10 @@ class RNASeqDataset(Dataset):
 
 
 @dataclass
-class DatasetFile(db.Model):
+class File(db.Model):
     file_id = db.Column(db.Integer, primary_key=True)
-    dataset_id = db.Column(
-        db.Integer,
-        db.ForeignKey("dataset.dataset_id", onupdate="cascade", ondelete="cascade"),
-        nullable=False,
-    )
     path: str = db.Column(db.String(500), nullable=False, unique=True)
+    multiplexed: bool = db.Column(db.Boolean)
 
 
 class AnalysisState(str, Enum):

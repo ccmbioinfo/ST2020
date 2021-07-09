@@ -1,17 +1,10 @@
 from dataclasses import asdict
-from datetime import datetime
 from enum import Enum
 import inspect
 from io import StringIO
+from typing import Any, Dict
 
-from flask import (
-    Blueprint,
-    abort,
-    current_app as app,
-    jsonify,
-    request,
-    redirect,
-)
+from flask import Blueprint, abort, current_app as app, jsonify, request, Request
 from flask.helpers import url_for
 from flask_login import current_user, login_required, login_user, logout_user
 import pandas as pd
@@ -19,7 +12,13 @@ from sqlalchemy.orm import joinedload
 
 from . import models
 from .extensions import db, oauth
-from .utils import enum_validate, transaction_or_abort, validate_json, update_last_login
+from .utils import (
+    enum_validate,
+    find,
+    transaction_or_abort,
+    validate_json,
+    update_last_login,
+)
 
 import numpy as np
 
@@ -538,19 +537,8 @@ def bulk_update():
             batch_id=row.get("batch_id"),
         )
         app.logger.debug("\tLinking files to dataset..")
-        if request.content_type == "text/csv":
-            app.logger.debug(
-                "\tContent type is `text/csv` and linked files are expected to be | separated: '%s'",
-                row.get("linked_files", "").split("|"),
-            )
-            files = row.get("linked_files", "").split("|")
-        else:
-            app.logger.debug(
-                "\tContent type is NOT `test/csv` and linked files are expected to be in a list: '%s'",
-                row.get("linked_files", []),
-            )
-            files = row.get("linked_files", [])
-        dataset.files += [models.DatasetFile(path=path) for path in files if path]
+
+        dataset = link_files_to_dataset(request, dataset, row)
 
         app.logger.debug("\tAdding users groups to the dataset")
         dataset.groups += groups
@@ -595,3 +583,59 @@ def bulk_update():
     ]
     app.logger.info("Done, returning JSON..")
     return jsonify(datasets)
+
+
+def link_files_to_dataset(
+    req: Request, dataset: models.Dataset, row: Dict[str, Any]
+) -> models.Dataset:
+    """validate filepaths and link to a dataset"""
+    if req.content_type == "text/csv":
+        app.logger.debug(
+            "\tContent type is `text/csv` and linked files are expected to be | separated: '%s'",
+            row.get("linked_files", "").split("|"),
+        )
+        files = []
+        for path in row.get("linked_files", "").split("|"):
+            if path:
+                is_multiplex = path[0] == "*"
+                files.append(
+                    {
+                        "path": path if not is_multiplex else path[1:],
+                        "multiplexed": is_multiplex,
+                    }
+                )
+
+    else:
+        app.logger.debug(
+            "\tContent type is NOT `test/csv` and linked files are expected to be in a list: '%s'",
+            row.get("linked_files", []),
+        )
+        files = row.get("linked_files", [])
+
+    extant_files = models.File.query.filter(
+        models.File.path.in_([f["path"] for f in files])
+    ).all()
+
+    dataset.linked_files = []
+
+    for file in files:
+        extant = find(
+            extant_files,
+            lambda extant, path=file["path"]: extant.path == path,
+        )
+        if extant and (not extant.multiplexed or not file["multiplexed"]):
+            path = file.get("path")
+            abort(
+                400,
+                description=f'File {path} is already linked! If they are multiplexed, please mark with "*"!',
+            )
+        elif extant:
+            dataset.linked_files.append(extant)
+        else:
+            dataset.linked_files.append(
+                models.File(
+                    path=file["path"],
+                    multiplexed=file.get("multiplexed"),
+                )
+            )
+    return dataset

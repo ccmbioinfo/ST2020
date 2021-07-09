@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { makeStyles, Popover, Typography } from "@material-ui/core";
+import { Grid, makeStyles, Popover, Typography } from "@material-ui/core";
 
 const useStyles = makeStyles(theme => ({
     notes: {
@@ -23,7 +23,10 @@ const useStyles = makeStyles(theme => ({
 /**
  * A style wrapper for strings of text that are really long.
  */
-export default function Note(props: { children: React.ReactNode }) {
+export default function Note(props: {
+    children: React.ReactNode;
+    DetailComponent?: React.ReactNode;
+}) {
     const classes = useStyles();
     const [anchorEl, setAnchorEl] = useState<HTMLDivElement | null>(null);
 
@@ -38,7 +41,12 @@ export default function Note(props: { children: React.ReactNode }) {
                 onClose={() => setAnchorEl(null)}
                 PaperProps={{ className: classes.paper }}
             >
-                <Typography className={classes.typography}>{props.children}</Typography>
+                <Grid container direction="column">
+                    <Grid item>
+                        <Typography className={classes.typography}>{props.children}</Typography>
+                    </Grid>
+                    {!!props.DetailComponent && <Grid item>{props.DetailComponent}</Grid>}
+                </Grid>
             </Popover>
         </>
     );

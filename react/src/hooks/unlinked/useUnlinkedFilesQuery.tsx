@@ -1,4 +1,5 @@
 import { useQuery } from "react-query";
+import { UnlinkedFile } from "../../typings";
 import { basicFetch } from "../utils";
 
 async function fetchFiles() {
@@ -12,6 +13,6 @@ async function fetchFiles() {
  * for all unlinked files in MinIO.
  */
 export function useUnlinkedFilesQuery() {
-    const result = useQuery<string[], Response>("unlinked", fetchFiles);
+    const result = useQuery<UnlinkedFile[], Response>("unlinked", fetchFiles);
     return result;
 }

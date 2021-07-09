@@ -2,7 +2,9 @@ import React, { useState } from "react";
 import {
     Box,
     Button,
+    Checkbox,
     Chip,
+    FormControlLabel,
     Grid,
     List,
     makeStyles,
@@ -13,9 +15,8 @@ import {
 } from "@material-ui/core";
 import { Description } from "@material-ui/icons";
 import { Autocomplete, createFilterOptions } from "@material-ui/lab";
-import { toOption } from "../AddDatasets/components/utils";
 import { Note } from "../components";
-import { Option } from "../typings";
+import { LinkedFile, UnlinkedFile } from "../typings";
 
 const useStyles = makeStyles(theme => ({
     popoverBox: {
@@ -42,13 +43,13 @@ const useStyles = makeStyles(theme => ({
 }));
 
 /* A cell for linking files to a dataset. */
-export default function FileLinkingComponent(props: {
-    values: string[];
-    options: Option[];
-    onEdit: (newValue: string[]) => void;
+const FileLinkingComponent: React.FC<{
+    values: LinkedFile[];
+    options: UnlinkedFile[];
+    onEdit: (newValue: UnlinkedFile[]) => void;
     disabled?: boolean;
     disableTooltip?: boolean;
-}) {
+}> = ({ values, options, onEdit, disabled, disableTooltip }) => {
     const classes = useStyles();
     const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
     const [inputValue, setInputValue] = useState("");
@@ -67,18 +68,18 @@ export default function FileLinkingComponent(props: {
             <Tooltip
                 placement="left"
                 interactive
-                disableFocusListener={props.disableTooltip}
-                disableHoverListener={props.disableTooltip}
-                disableTouchListener={props.disableTooltip}
+                disableFocusListener={disableTooltip}
+                disableHoverListener={disableTooltip}
+                disableTouchListener={disableTooltip}
                 title={
-                    props.values.length === 0 ? (
+                    values.length === 0 ? (
                         <Typography variant="body2">No files selected</Typography>
                     ) : (
                         <List>
-                            {props.values.map(value => {
+                            {values.map(value => {
                                 return (
                                     <Grid
-                                        key={value}
+                                        key={value.path}
                                         container
                                         wrap="nowrap"
                                         spacing={1}
@@ -92,7 +93,7 @@ export default function FileLinkingComponent(props: {
                                                 variant="body2"
                                                 className={classes.fileName}
                                             >
-                                                {value}
+                                                {value.path}
                                             </Typography>
                                         </Grid>
                                     </Grid>
@@ -103,16 +104,17 @@ export default function FileLinkingComponent(props: {
                 }
             >
                 <span>
+                    {/* prevent mui warnings about tooltip wrapping disabled button */}
                     <Button
                         variant="contained"
                         color="default"
                         size="small"
                         onClick={handleClick}
-                        disabled={props.disabled}
+                        disabled={disabled}
                         disableRipple
                         disableElevation
                     >
-                        {props.values.length} files
+                        {values.length} files
                     </Button>
                 </span>
             </Tooltip>
@@ -131,7 +133,7 @@ export default function FileLinkingComponent(props: {
             >
                 <Box className={classes.popoverBox}>
                     <div className={classes.popoverBoxHeader}>
-                        {props.options.length === 0 && props.values.length === 0 ? (
+                        {options.length === 0 && values.length === 0 ? (
                             <Typography variant="h6" className={classes.popoverTitle}>
                                 No files available
                             </Typography>
@@ -155,34 +157,64 @@ export default function FileLinkingComponent(props: {
                                             selectedOptions &&
                                             ["select-option", "remove-option"].includes(reason)
                                         ) {
-                                            props.onEdit(selectedOptions.map(o => o.title));
+                                            onEdit(selectedOptions);
                                             setInputValue("");
                                         }
                                     }}
                                     renderTags={(tags, getTagProps) => (
                                         <>
-                                            {tags.map((tag, i) => (
-                                                <Chip
-                                                    key={tag.title}
-                                                    {...getTagProps({ index: i })}
-                                                    label={<Note>{tag.title}</Note>}
-                                                />
-                                            ))}
+                                            {tags.map((tag, i) => {
+                                                const onChange = () => {
+                                                    onEdit(
+                                                        tags.map(t => ({
+                                                            ...t,
+                                                            multiplexed:
+                                                                t.path === tag.path
+                                                                    ? !t.multiplexed
+                                                                    : t.multiplexed,
+                                                        }))
+                                                    );
+                                                };
+                                                const detail = (
+                                                    <Box margin={1}>
+                                                        <FormControlLabel
+                                                            label="Multiplexed?"
+                                                            control={
+                                                                <Checkbox
+                                                                    checked={tag.multiplexed}
+                                                                    onChange={onChange}
+                                                                />
+                                                            }
+                                                        />
+                                                    </Box>
+                                                );
+                                                return (
+                                                    <Chip
+                                                        key={tag.path}
+                                                        {...getTagProps({ index: i })}
+                                                        label={
+                                                            <Note DetailComponent={detail}>
+                                                                {tag.path}
+                                                            </Note>
+                                                        }
+                                                    />
+                                                );
+                                            })}
                                         </>
                                     )}
                                     renderOption={option => (
-                                        <span className={classes.fileName}>{option.title}</span>
+                                        <span className={classes.fileName}>{option.path}</span>
                                     )}
                                     getOptionSelected={(option, value) =>
-                                        option.title === value.title
+                                        option.path === value.path
                                     }
-                                    options={props.options}
+                                    options={options}
                                     filterOptions={createFilterOptions({
                                         limit: 25,
-                                        stringify: o => o.title,
+                                        stringify: o => o.path,
                                     })}
                                     filterSelectedOptions={true}
-                                    getOptionLabel={option => option.title}
+                                    getOptionLabel={option => option.path}
                                     renderInput={params => (
                                         <TextField
                                             {...params}
@@ -191,7 +223,7 @@ export default function FileLinkingComponent(props: {
                                         />
                                     )}
                                     multiple
-                                    value={props.values.map(v => toOption(v))}
+                                    value={values}
                                 />
                             </Grid>
                         )}
@@ -200,4 +232,6 @@ export default function FileLinkingComponent(props: {
             </Popover>
         </>
     );
-}
+};
+
+export default FileLinkingComponent;

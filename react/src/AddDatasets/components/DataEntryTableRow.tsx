@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { TableRow } from "@material-ui/core";
 import { Delete, LibraryAdd } from "@material-ui/icons";
 import { useFamiliesQuery } from "../../hooks";
-import { DataEntryHeader, DataEntryRow, Family, Option } from "../../typings";
+import { DataEntryHeader, DataEntryRow, Family, UnlinkedFile } from "../../typings";
 import { DataEntryActionCell, DataEntryCell } from "./TableCells";
 import { participantColumns } from "./utils";
 
@@ -15,13 +15,13 @@ interface DataEntryTableRowProps {
     onDelete: () => void;
     onDuplicate: () => void;
     onChange: (
-        newValue: string | boolean | string[],
+        newValue: string | boolean | UnlinkedFile[],
         rowIndex: number,
         col: DataEntryHeader,
         families: Family[],
         autopopulate?: boolean
     ) => void;
-    getOptions: (rowIndex: number, col: DataEntryHeader, families: Family[]) => Option[];
+    getOptions: (rowIndex: number, col: DataEntryHeader, families: Family[]) => any[];
 }
 
 /**
@@ -34,7 +34,7 @@ export default function DataEntryTableRow(props: DataEntryTableRowProps) {
     const showRNA = props.row.dataset_type === "RRS";
 
     function handleChange(
-        newValue: string | boolean | string[],
+        newValue: string | boolean | UnlinkedFile[],
         col: DataEntryHeader,
         autopopulate?: boolean
     ) {

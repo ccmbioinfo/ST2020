@@ -27,7 +27,7 @@ export default function DateFilterComponent<RowData extends object>(props: {
     const classes = useStyles();
     const filterValue: string | null = (props.columnDef as any).tableData.filterValue || null;
     const isBefore = filterValue === null ? true : filterValue.split(",")?.[0] === "before";
-    const date = filterValue?.split(",")?.[1] || null;
+    const date = filterValue?.split(",")?.[1] || "";
 
     function updateFilter(newBefore: boolean, newDate: string | null) {
         // https://github.com/mbrn/material-table/pull/2435
@@ -48,16 +48,19 @@ export default function DateFilterComponent<RowData extends object>(props: {
                 startAdornment: (
                     <InputAdornment position="start">
                         <Tooltip title={isBefore ? "Before" : "After"}>
-                            <IconButton
-                                disabled={filterValue === null}
-                                size="small"
-                                className={clsx(classes.button, {
-                                    [classes.buttonFlipped]: !isBefore,
-                                })}
-                                onClick={() => updateFilter(!isBefore, date)}
-                            >
-                                <NavigateBefore />
-                            </IconButton>
+                            {/* prevent mui warnings about tooltip wrapping disabled button */}
+                            <span>
+                                <IconButton
+                                    disabled={filterValue === null}
+                                    size="small"
+                                    className={clsx(classes.button, {
+                                        [classes.buttonFlipped]: !isBefore,
+                                    })}
+                                    onClick={() => updateFilter(!isBefore, date)}
+                                >
+                                    <NavigateBefore />
+                                </IconButton>
+                            </span>
                         </Tooltip>
                     </InputAdornment>
                 ),

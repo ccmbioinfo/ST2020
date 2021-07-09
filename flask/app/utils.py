@@ -5,7 +5,7 @@ from enum import Enum
 from functools import wraps
 from io import BytesIO, StringIO
 from os import getenv
-from typing import Any, Callable, Dict, List, Union
+from typing import Any, Callable, Dict, List, Union, Iterable, Mapping
 from flask import (
     abort,
     current_app as app,
@@ -298,3 +298,11 @@ class DateTimeEncoder(JSONEncoder):
 
         # default behaviour
         return JSONEncoder.default(self, obj)
+
+
+def find(collection: Iterable[Mapping[str, Any]], pred: Callable):
+    """find an item in a collection"""
+    try:
+        return next((item for item in collection if pred(item)))
+    except StopIteration:
+        return None
