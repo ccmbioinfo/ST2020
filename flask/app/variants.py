@@ -358,6 +358,21 @@ def summary(type: str):
             abort(500, "Unexpected error")
 
         agg_df = get_report_df(sql_df, type=type)
+
+        columns = request.args.get("columns", type=str)
+        if columns is not None:
+            columns = columns.split(",")
+            # filter out faulty columns
+            valid_columns = {col for col in agg_df.columns.values}
+            fixed_columns = [col for col in columns if col in valid_columns]
+            if len(fixed_columns) < len(columns):
+                app.logger.warn(
+                    "Ignoring invalid columns from request: {}".format(
+                        set(columns) ^ set(fixed_columns)
+                    )
+                )
+            agg_df = agg_df.loc[:, fixed_columns]
+
         csv_data = agg_df.to_csv(encoding="utf-8", index=False)
 
         response = Response(csv_data, mimetype="text/csv")
