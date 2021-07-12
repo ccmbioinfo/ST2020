@@ -50,7 +50,7 @@ markupsafe==2.0.1
     # via
     #   jinja2
     #   mako
-minio==7.0.4
+minio==7.1.0
     # via -r requirements.in
 numpy==1.20.2
     # via pandas
