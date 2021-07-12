@@ -1,4 +1,5 @@
 from dataclasses import asdict
+import re
 from typing import Any, List
 
 from flask import Blueprint, Response, abort, current_app as app, jsonify, request
@@ -185,23 +186,19 @@ def get_report_df(df: pd.DataFrame, type: str, relevant_cols=relevant_cols):
         return df
 
 
-def parse_gene_panel() -> List[Any]:
+def parse_gene_panel(genes: str) -> List[Any]:
     """
-    Parses query string parameter ?panel=ENSGXXXXXXXX,ENSGXXXXXXX for the current request.
+    Parses query string parameter ?panel=ENSGXXXXXXXX,ENSGXXXXXXX.
     We abort if the panel parameter is missing or malformed. If any specified gene isn't
     in our database, we also abort.
     Returns a list of filters for use against the variant table to find corresponding variants
     based on gene start and end positions.
     """
-    genes = request.args.get("panel", type=str)
-    if genes is None or len(genes) == 0:
-        app.logger.error("No gene(s) provided in the request body")
-        abort(400, description="No gene(s) provided")
-    genes = genes.lower().split(",")
-    app.logger.info("Requested gene panel: %s", genes)
+    genes_list = genes.lower().split(",")
+    app.logger.info("Requested gene panel: %s", genes_list)
     ensgs = set()
     errors = []
-    for gene in genes:
+    for gene in genes_list:
         if gene.startswith("ensg"):
             try:
                 ensgs.add(int(gene[4:]))
@@ -227,9 +224,95 @@ def parse_gene_panel() -> List[Any]:
         app.logger.error("Not all requested genes were found.")
         abort(400, description="Not all requested genes were found.")
 
-    genes = query.all()
+    genes_list = query.all()  # TODO: is this line necessary?
 
     return ensgs
+
+
+def parse_region(region: str):
+    """
+    Parses a given list of ranges (eg. "chr1:0500-0509,chr5:0600-0630,chr18:0440-0330").
+    Returns a filter for use against the variant table to find corresponding variants
+    based on gene start and end positions.
+    """
+    CHR, START, END = 0, 1, 2
+    # format check
+    # 1: chromosome, 2: start position, 3: end position
+    region_pattern = re.compile("chr([\da-zA-Z]+):([\d]+)-([\d]+)")
+    matches = [region_pattern.match(r) for r in region.split(",")]
+
+    if not all(match is not None and len(match.groups()) == 3 for match in matches):
+        app.logger.error("Invalid region format: %s", region)
+        abort(400, description="Invalid region format")
+
+    # prepare set of regions
+    region_set = set([match.groups() for match in matches])
+    for r in region_set:
+        # fix regions to be consistent (start-end)
+        if int(r[START]) > int(r[END]):
+            r = (r[CHR], r[END], r[START])
+
+    # query
+    region_filter = or_(
+        *[
+            and_(
+                models.Variant.chromosome == tup[CHR],
+                int(tup[START]) <= models.Variant.position,
+                models.Variant.position <= int(tup[END]),
+            )
+            for tup in region_set
+        ]
+    )
+
+    query = models.Variant.query.filter(region_filter)
+
+    found_variants = query.with_entities(
+        func.count(distinct(models.Variant.variant_id))
+    ).scalar()
+    if found_variants == 0:
+        app.logger.warning("No requested variants were found")
+
+    return region_filter
+
+
+def parse_position(position: str):
+    """
+    Parses a given list of positions and chromosomes (eg. "chr1:5000,chrY:8000").
+    Returns a filter for use against the variant table to find corresponding variants
+    based on gene start and end positions.
+    """
+    CHR, POS = 0, 1
+    # format check
+    # 1: chromosome, 2: position
+    position_pattern = re.compile("chr([\da-zA-Z]+):([\d]+)")
+    matches = [position_pattern.match(p) for p in position.split(",")]
+
+    if not all(match is not None and len(match.groups()) == 2 for match in matches):
+        app.logger.error("Invalid position format: %s", position)
+        abort(400, description="Invalid position format")
+
+    # prepare set of positions
+    position_set = set([match.groups() for match in matches])
+
+    # query
+    position_filter = or_(
+        *[
+            and_(
+                models.Variant.chromosome == tup[CHR],
+                models.Variant.position == tup[POS],
+            )
+            for tup in position_set
+        ]
+    )
+
+    query = models.Variant.query.filter(position_filter)
+    found_variants = query.with_entities(
+        func.count(distinct(models.Variant.variant_id))
+    ).scalar()
+    if found_variants == 0:
+        app.logger.warning("No requested variants were found")
+
+    return position_filter
 
 
 @variants_blueprint.route("/api/summary/<string:type>", methods=["GET"])
@@ -259,7 +342,11 @@ def summary(type: str):
         user_id = current_user.user_id
         app.logger.debug("User is regular with ID '%s'", user_id)
 
-    ensgs = parse_gene_panel()
+    genes = request.args.get("panel", type=str)
+    if genes is None or len(genes) == 0:
+        app.logger.error("No gene(s) provided in the request body")
+        abort(400, description="No gene(s) provided")
+    ensgs = parse_gene_panel(genes)
 
     # app.logger.debug(ensgs)
 
