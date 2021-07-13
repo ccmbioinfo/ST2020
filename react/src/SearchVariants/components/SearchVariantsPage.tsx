@@ -86,9 +86,9 @@ const SearchVariantsPage: React.FC<SearchVariantsPageProps> = () => {
     const downloadCsv = () => {
         const panel = selectedGenes.map(gene => `ENSG${gene.ensembl_id}`).join(",");
         if (downloadType === "participant") {
-            return downloadParticipantwiseCsv({ panel });
+            return downloadParticipantwiseCsv({ panel, search_by: "gene" });
         }
-        return downloadVariantwiseCsv({ panel });
+        return downloadVariantwiseCsv({ panel, search_by: "gene" });
     };
 
     useEffect(() => {

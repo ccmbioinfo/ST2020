@@ -1,4 +1,5 @@
 from dataclasses import asdict
+import re
 from typing import Any, List
 
 from flask import Blueprint, Response, abort, current_app as app, jsonify, request
@@ -185,23 +186,19 @@ def get_report_df(df: pd.DataFrame, type: str, relevant_cols=relevant_cols):
         return df
 
 
-def parse_gene_panel() -> List[Any]:
+def parse_gene_panel(genes: str) -> List[Any]:
     """
-    Parses query string parameter ?panel=ENSGXXXXXXXX,ENSGXXXXXXX for the current request.
+    Parses query string parameter ?panel=ENSGXXXXXXXX,ENSGXXXXXXX.
     We abort if the panel parameter is missing or malformed. If any specified gene isn't
     in our database, we also abort.
     Returns a list of filters for use against the variant table to find corresponding variants
     based on gene start and end positions.
     """
-    genes = request.args.get("panel", type=str)
-    if genes is None or len(genes) == 0:
-        app.logger.error("No gene(s) provided in the request body")
-        abort(400, description="No gene(s) provided")
-    genes = genes.lower().split(",")
-    app.logger.info("Requested gene panel: %s", genes)
+    genes_list = genes.lower().split(",")
+    app.logger.info("Requested gene panel: %s", genes_list)
     ensgs = set()
     errors = []
-    for gene in genes:
+    for gene in genes_list:
         if gene.startswith("ensg"):
             try:
                 ensgs.add(int(gene[4:]))
@@ -216,7 +213,9 @@ def parse_gene_panel() -> List[Any]:
     # we can't validate whether the requested genes are found in the results (if that is still desired), since gene is no longer a property like in the variant endpoint
     # this may not play well if we decide to pre-populate the entire gene table though since in that case, a gene can be found in the database but not have variants
     # Again, we customize the count query for efficiency
-    query = models.Gene.query.filter(models.Gene.ensembl_id.in_(ensgs))
+    gene_filter = models.Gene.ensembl_id.in_(ensgs)
+
+    query = models.Gene.query.filter(gene_filter)
     found_genes = query.with_entities(
         func.count(distinct(models.Gene.ensembl_id))
     ).scalar()
@@ -227,17 +226,109 @@ def parse_gene_panel() -> List[Any]:
         app.logger.error("Not all requested genes were found.")
         abort(400, description="Not all requested genes were found.")
 
-    genes = query.all()
+    genes_list = query.all()  # TODO: is this line necessary?
 
-    return ensgs
+    return gene_filter
+
+
+def parse_region(region: str):
+    """
+    Parses a given list of ranges (eg. "chr1:0500-0509,chr5:0600-0630,chr18:0440-0330").
+    Returns a filter for use against the variant table to find corresponding variants
+    based on gene start and end positions.
+    """
+    CHR, START, END = 0, 1, 2
+    # format check
+    # 1: chromosome, 2: start position, 3: end position
+    region_pattern = re.compile("chr([\da-zA-Z]+):([\d]+)-([\d]+)")
+    matches = [region_pattern.match(r) for r in region.split(",")]
+
+    app.logger.info("Requested region: %s", region)
+
+    if not all(match is not None and len(match.groups()) == 3 for match in matches):
+        app.logger.error("Invalid region format: %s", region)
+        abort(400, description="Invalid region format")
+
+    # prepare set of regions
+    region_set = set([match.groups() for match in matches])
+    for r in region_set:
+        # fix regions to be consistent (start-end)
+        if int(r[START]) > int(r[END]):
+            r = (r[CHR], r[END], r[START])
+
+    # query
+    region_filter = or_(
+        *[
+            and_(
+                models.Variant.chromosome == tup[CHR],
+                int(tup[START]) <= models.Variant.position,
+                models.Variant.position <= int(tup[END]),
+            )
+            for tup in region_set
+        ]
+    )
+
+    query = models.Variant.query.filter(region_filter)
+
+    found_variants = query.with_entities(
+        func.count(distinct(models.Variant.variant_id))
+    ).scalar()
+    if found_variants == 0:
+        app.logger.warning("No requested variants were found")
+
+    return region_filter
+
+
+def parse_position(position: str):
+    """
+    Parses a given list of positions and chromosomes (eg. "chr1:5000,chrY:8000").
+    Returns a filter for use against the variant table to find corresponding variants
+    based on gene start and end positions.
+    """
+    CHR, POS = 0, 1
+    # format check
+    # 1: chromosome, 2: position
+    position_pattern = re.compile("chr([\da-zA-Z]+):([\d]+)")
+    matches = [position_pattern.match(p) for p in position.split(",")]
+
+    app.logger.info("Requested position: %s", position)
+
+    if not all(match is not None and len(match.groups()) == 2 for match in matches):
+        app.logger.error("Invalid position format: %s", position)
+        abort(400, description="Invalid position format")
+
+    # prepare set of positions
+    position_set = set([match.groups() for match in matches])
+
+    # query
+    position_filter = or_(
+        *[
+            and_(
+                models.Variant.chromosome == tup[CHR].upper(),
+                models.Variant.position == tup[POS],
+            )
+            for tup in position_set
+        ]
+    )
+
+    query = models.Variant.query.filter(position_filter)
+    found_variants = query.with_entities(
+        func.count(distinct(models.Variant.variant_id))
+    ).scalar()
+    if found_variants == 0:
+        app.logger.warning("No requested variants were found")
+
+    return position_filter
 
 
 @variants_blueprint.route("/api/summary/<string:type>", methods=["GET"])
 @login_required
 def summary(type: str):
     """
-    GET /api/summary/participants\?panel=ENSG00000138131
-    GET /api/summary/variants\?panel=ENSG00000138131
+    GET /api/summary/participants\?panel=ENSG00000138131&search_by=gene
+    GET /api/summary/variants\?panel=ENSG00000138131&search_by=gene
+    GET /api/summary/participants\?panel=chr1:5000,chr2:6000&search_by=position
+    GET /api/summary/participants\?panel=chr1:5000-6000,chrX:5000-6000&search_by=region
 
     The same sqlalchemy query is used for both endpoints as the participant-wise report is the precursor to the variant-wise report.
 
@@ -248,6 +339,7 @@ def summary(type: str):
     The variant csv output is a summary - each row is a unique variant with various columns collapsed and ';' delimited indicating for example, all participants that had such a variant.
 
     """
+    valid_search_types = {"gene", "position", "region"}
 
     if type not in ["variants", "participants"]:
         abort(404)
@@ -259,9 +351,30 @@ def summary(type: str):
         user_id = current_user.user_id
         app.logger.debug("User is regular with ID '%s'", user_id)
 
-    ensgs = parse_gene_panel()
+    search_type = request.args.get("search_by", type=str)
+    if search_type is None:
+        app.logger.error("Search type missing")
+        abort(400, description="Search field missing")
 
-    # app.logger.debug(ensgs)
+    if search_type not in valid_search_types:
+        app.logger.error("Invalid search type: %s", search_type)
+        abort(400, description="Invalid search field")
+
+    panel = request.args.get("panel", type=str)
+    if panel is None or len(panel) == 0:
+        app.logger.error("Missing panel field")
+        abort(400, description="Missing panel field")
+
+    variant_filter = None
+
+    if search_type == "gene":
+        variant_filter = parse_gene_panel(panel)
+
+    elif search_type == "region":
+        variant_filter = parse_region(panel)
+
+    elif search_type == "position":
+        variant_filter = parse_position(panel)
 
     # returns a tuple (Genes, Variants)
     query = (
@@ -287,7 +400,7 @@ def summary(type: str):
         .join(models.Dataset.tissue_sample)
         .join(models.TissueSample.participant)
         .join(models.Participant.family)
-        .filter(models.Gene.ensembl_id.in_(ensgs))
+        .filter(variant_filter)
     )
 
     if user_id:
@@ -358,6 +471,21 @@ def summary(type: str):
             abort(500, "Unexpected error")
 
         agg_df = get_report_df(sql_df, type=type)
+
+        columns = request.args.get("columns", type=str)
+        if columns is not None:
+            columns = columns.split(",")
+            # filter out faulty columns
+            valid_columns = {col for col in agg_df.columns.values}
+            fixed_columns = [col for col in columns if col in valid_columns]
+            if len(fixed_columns) < len(columns):
+                app.logger.warn(
+                    "Ignoring invalid columns from request: {}".format(
+                        set(columns) ^ set(fixed_columns)
+                    )
+                )
+            agg_df = agg_df.loc[:, fixed_columns]
+
         csv_data = agg_df.to_csv(encoding="utf-8", index=False)
 
         response = Response(csv_data, mimetype="text/csv")
